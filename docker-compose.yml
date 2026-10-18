@@ -1,0 +1,42 @@
+services:
+  # Servicio que sabe el stock. No llama a nadie.
+  inventoryservice:
+    build: ./InventoryService
+    container_name: inventoryservice
+    ports:
+      - "8081:80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/inventory/P001"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+
+  # Servicio que recibe pedidos y consulta al InventoryService de forma sincrona.
+  ordersservice:
+    build: ./OrdersService
+    container_name: ordersservice
+    ports:
+      - "8080:80"
+    environment:
+      - INVENTORY_BASE_URL=http://inventoryservice:80/
+    depends_on:
+      inventoryservice:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/orders"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+
+  # Cliente consola: dispara pedidos y muestra como los resuelve OrdersService.
+  ordersclient:
+    build: ./OrdersClient
+    container_name: ordersclient
+    environment:
+      - ORDERS_BASE_URL=http://ordersservice:80/
+    depends_on:
+      ordersservice:
+        condition: service_healthy
+    restart: "no"
