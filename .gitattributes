@@ -1,0 +1,15 @@
+# Estos archivos se interpretan dentro de contenedores Linux, donde LF es obligatorio.
+# Sin esto, core.autocrlf en Windows los escribe con CRLF y rompen las
+# continuaciones de linea con "\" de los Dockerfiles.
+Dockerfile    text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.sln         text eol=lf
+*.sh          text eol=lf
+
+# Codigo fuente y configuracion de .NET: el fin de linea lo elige cada sistema.
+*.cs          text=auto
+*.csproj      text=auto
+*.json        text=auto
+*.md          text=auto
+*.http        text=auto

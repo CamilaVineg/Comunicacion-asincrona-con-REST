@@ -51,7 +51,8 @@ public class OrdersController : ControllerBase
                 orderId, request, $"El producto {request.ProductId} no existe."));
         }
 
-        // 3) Stock insuficiente -> 409 Conflict (el pedido es valido, el estado del recurso no).
+        // 3) Stock insuficiente segun el check -> 409 Conflict
+        //    (el pedido es valido, el estado del recurso no).
         if (!check.Available)
         {
             return Conflict(Rejected(
@@ -59,11 +60,31 @@ public class OrdersController : ControllerBase
                 $"Stock insuficiente. Disponible: {check.Stock}, solicitado: {request.Quantity}."));
         }
 
-        // 4) Confirmado -> 201 Created.
+        // 4) El check fue informativo; la reserva es la que descuenta de verdad.
+        //    Si entre el check y la reserva otro pedido consumio el stock, el
+        //    inventario responde 409 y el pedido se rechaza igual.
+        var reserve = await _inventory.ReserveStockAsync(request.ProductId, request.Quantity, ct);
+
+        if (!reserve.ServiceReachable)
+        {
+            _logger.LogError("Pedido {OrderId} rechazado: InventoryService cayo al reservar.", orderId);
+
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, Rejected(
+                orderId, request, "InventoryService no esta disponible. Reintentar mas tarde."));
+        }
+
+        if (!reserve.Reserved)
+        {
+            return Conflict(Rejected(
+                orderId, request,
+                $"Stock insuficiente al reservar. Disponible: {reserve.Remaining}, solicitado: {request.Quantity}."));
+        }
+
+        // 5) Confirmado -> 201 Created. Remaining viene del inventario, no es una estimacion.
         var created = new OrderResponse(
             orderId, request.CustomerId, request.ProductId, request.Quantity,
             OrderStatus.Confirmed,
-            $"Pedido confirmado. Stock restante: {check.Stock - request.Quantity}.");
+            $"Pedido confirmado. Stock restante: {reserve.Remaining}.");
 
         Pedidos[orderId] = created;
         _logger.LogInformation("Pedido {OrderId} confirmado para {CustomerId}.", orderId, request.CustomerId);
